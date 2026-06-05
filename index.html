@@ -1,0 +1,1188 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>DIP Decision Matrix Viewer</title>
+  <script src="https://cdn.jsdelivr.net/npm/js-yaml@4.1.0/dist/js-yaml.min.js"></script>
+  <style>
+    :root {
+      --ink: #1f2933;
+      --muted: #5f6c7b;
+      --line: #d8dee6;
+      --panel: #ffffff;
+      --page: #f4f6f8;
+      --accent: #2457a6;
+      --accent-strong: #123f7e;
+      --ok: #dff3dc;
+      --warn: #fff1b8;
+      --bad: #f8c9c7;
+      --neutral: #ffffff;
+      --unknown: #edf0f4;
+      --shadow: 0 10px 25px rgba(31, 41, 51, 0.08);
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      color: var(--ink);
+      background: var(--page);
+      line-height: 1.45;
+    }
+
+    button,
+    select,
+    textarea {
+      font: inherit;
+    }
+
+    .app {
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: minmax(320px, 40%) minmax(0, 1fr);
+    }
+
+    .app.editor-hidden {
+      grid-template-columns: minmax(0, 1fr);
+    }
+
+    .app.editor-hidden .editor {
+      display: none;
+    }
+
+    .editor {
+      min-height: 100vh;
+      display: grid;
+      grid-template-rows: auto auto minmax(360px, 1fr) auto;
+      gap: 14px;
+      padding: 18px;
+      background: #e9edf2;
+      border-right: 1px solid var(--line);
+    }
+
+    .brand {
+      display: flex;
+      align-items: baseline;
+      justify-content: space-between;
+      gap: 14px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 1.25rem;
+      font-weight: 760;
+      letter-spacing: 0;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .input-mode {
+      display: inline-flex;
+      align-items: center;
+      gap: 7px;
+      min-height: 36px;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .input-mode select {
+      min-height: 36px;
+      border: 1px solid #aeb8c5;
+      border-radius: 7px;
+      padding: 0 30px 0 10px;
+      background: var(--panel);
+      color: var(--ink);
+    }
+
+    .btn {
+      min-height: 36px;
+      border: 1px solid #aeb8c5;
+      background: var(--panel);
+      color: var(--ink);
+      border-radius: 7px;
+      padding: 0 12px;
+      cursor: pointer;
+    }
+
+    .btn.primary {
+      border-color: var(--accent);
+      background: var(--accent);
+      color: white;
+    }
+
+    .btn:hover {
+      border-color: var(--accent-strong);
+    }
+
+    .view-toggle {
+      position: fixed;
+      top: 12px;
+      right: 12px;
+      z-index: 30;
+      box-shadow: 0 8px 18px rgba(31, 41, 51, 0.16);
+    }
+
+    .file-row {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 0.86rem;
+    }
+
+    .status {
+      display: inline-flex;
+      align-items: center;
+      min-height: 28px;
+      border-radius: 999px;
+      padding: 0 10px;
+      background: rgba(255, 255, 255, 0.72);
+      color: var(--muted);
+      white-space: nowrap;
+    }
+
+    .status.error {
+      background: var(--bad);
+      color: #7a1612;
+    }
+
+    .status.warn {
+      background: var(--warn);
+      color: #665200;
+    }
+
+    .status.ok {
+      background: var(--ok);
+      color: #265d29;
+    }
+
+    textarea {
+      width: 100%;
+      height: 100%;
+      min-height: 360px;
+      resize: none;
+      border: 1px solid #bac3cf;
+      border-radius: 8px;
+      padding: 14px;
+      background: #111827;
+      color: #f7fafc;
+      line-height: 1.5;
+      tab-size: 2;
+      outline: none;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.88rem;
+    }
+
+    textarea:focus {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 3px rgba(36, 87, 166, 0.18);
+    }
+
+    .hint {
+      margin: 0;
+      color: var(--muted);
+      font-size: 0.84rem;
+    }
+
+    .viewer {
+      min-width: 0;
+      padding: 22px;
+      overflow: auto;
+    }
+
+    .app.editor-hidden .viewer {
+      padding: 14px;
+    }
+
+    .problem {
+      position: sticky;
+      top: 0;
+      z-index: 10;
+      padding: 14px 130px 14px 16px;
+      margin: -22px -22px 18px;
+      border-bottom: 1px solid var(--line);
+      background: rgba(244, 246, 248, 0.96);
+      backdrop-filter: blur(8px);
+    }
+
+    .app.editor-hidden .problem {
+      margin: -14px -14px 14px;
+    }
+
+    .problem-label {
+      margin: 0 0 4px;
+      color: var(--muted);
+      font-size: 0.76rem;
+      font-weight: 740;
+      text-transform: uppercase;
+      letter-spacing: 0.08em;
+    }
+
+    .problem-text {
+      margin: 0;
+      font-size: 1rem;
+      font-weight: 680;
+    }
+
+    .grid {
+      display: grid;
+      gap: 16px;
+    }
+
+    .section {
+      background: var(--panel);
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .section-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 12px 14px;
+      border-bottom: 1px solid var(--line);
+      background: #fbfcfd;
+    }
+
+    h2 {
+      margin: 0;
+      font-size: 0.96rem;
+      letter-spacing: 0;
+    }
+
+    .count {
+      color: var(--muted);
+      font-size: 0.82rem;
+      white-space: nowrap;
+    }
+
+    .content {
+      padding: 14px;
+    }
+
+    .plain-list {
+      display: grid;
+      gap: 8px;
+      margin: 0;
+      padding: 0;
+      list-style: none;
+    }
+
+    .plain-list li {
+      padding: 9px 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fbfcfd;
+    }
+
+    .intent-table,
+    .matrix-table {
+      width: 100%;
+      border-collapse: separate;
+      border-spacing: 0;
+    }
+
+    .intent-table th,
+    .intent-table td,
+    .matrix-table th,
+    .matrix-table td {
+      border-right: 1px solid var(--line);
+      border-bottom: 1px solid var(--line);
+      vertical-align: top;
+      text-align: left;
+    }
+
+    .intent-table th,
+    .matrix-table th {
+      background: #f8fafc;
+      font-size: 0.78rem;
+      font-weight: 760;
+      color: #354152;
+    }
+
+    .intent-table th,
+    .intent-table td {
+      padding: 10px;
+    }
+
+    .intent-table tr > :first-child,
+    .matrix-table tr > :first-child {
+      border-left: 1px solid var(--line);
+    }
+
+    .intent-table thead tr:first-child > *,
+    .matrix-table thead tr:first-child > * {
+      border-top: 1px solid var(--line);
+    }
+
+    .intent-table thead tr:first-child > :first-child,
+    .matrix-table thead tr:first-child > :first-child {
+      border-top-left-radius: 7px;
+    }
+
+    .intent-table thead tr:first-child > :last-child,
+    .matrix-table thead tr:first-child > :last-child {
+      border-top-right-radius: 7px;
+    }
+
+    .matrix-wrap {
+      overflow: auto;
+    }
+
+    .app.editor-hidden .matrix-section {
+      min-height: calc(100vh - 132px);
+    }
+
+    .matrix-table {
+      width: 100%;
+      min-width: 760px;
+      table-layout: fixed;
+    }
+
+    .matrix-table th,
+    .matrix-table td {
+      min-width: 190px;
+      padding: 10px;
+    }
+
+    .matrix-table .criterion-col {
+      width: 220px;
+      min-width: 220px;
+      position: sticky;
+      left: 0;
+      z-index: 3;
+      background: #f8fafc;
+    }
+
+    .matrix-table tbody .criterion-col {
+      background: #ffffff;
+    }
+
+    .approach-id,
+    .criterion-id {
+      display: block;
+      margin-bottom: 3px;
+      color: var(--muted);
+      font-size: 0.72rem;
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+    }
+
+    .cell {
+      min-height: 96px;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
+    .cell.green {
+      background: var(--ok);
+    }
+
+    .cell.yellow {
+      background: var(--warn);
+    }
+
+    .cell.red {
+      background: var(--bad);
+    }
+
+    .cell.white {
+      background: var(--neutral);
+    }
+
+    .cell.unknown {
+      background: var(--unknown);
+      color: var(--muted);
+    }
+
+    .swatches {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px 12px;
+      color: var(--muted);
+      font-size: 0.8rem;
+    }
+
+    .swatch {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      white-space: nowrap;
+    }
+
+    .dot {
+      width: 13px;
+      height: 13px;
+      border: 1px solid #aeb8c5;
+      border-radius: 3px;
+      background: white;
+    }
+
+    .dot.green {
+      background: var(--ok);
+    }
+
+    .dot.yellow {
+      background: var(--warn);
+    }
+
+    .dot.red {
+      background: var(--bad);
+    }
+
+    .dot.unknown {
+      background: var(--unknown);
+    }
+
+    .warning-list li {
+      border-color: #f0c0bd;
+      background: #fff8f7;
+      color: #6f251f;
+    }
+
+    .empty-state {
+      padding: 34px;
+      text-align: center;
+      color: var(--muted);
+      border: 1px dashed #aeb8c5;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.7);
+    }
+
+    .summary {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 10px;
+    }
+
+    .metric {
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fbfcfd;
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 1.25rem;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 0.78rem;
+    }
+
+    @media (max-width: 980px) {
+      .app {
+        grid-template-columns: 1fr;
+      }
+
+      .editor {
+        min-height: auto;
+        border-right: 0;
+        border-bottom: 1px solid var(--line);
+      }
+
+      textarea {
+        min-height: 300px;
+      }
+
+      .viewer {
+        padding: 18px;
+      }
+
+      .problem {
+        margin: -18px -18px 16px;
+      }
+
+      .app.editor-hidden .problem {
+        margin: -14px -14px 14px;
+      }
+    }
+
+    @media (max-width: 640px) {
+      .brand,
+      .file-row,
+      .section-header {
+        align-items: flex-start;
+        flex-direction: column;
+      }
+
+      .summary {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+      }
+
+      .view-toggle {
+        top: 8px;
+        right: 8px;
+      }
+
+      .app.editor-hidden .problem {
+        padding-right: 110px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <button class="btn view-toggle" id="editorToggleBtn" type="button" aria-expanded="true" aria-controls="dipEditor">Hide input</button>
+  <main class="app" id="app">
+    <aside class="editor" id="dipEditor">
+      <div class="brand">
+        <h1>DIP Viewer</h1>
+        <span id="parseStatus" class="status">Waiting</span>
+      </div>
+      <div class="toolbar">
+        <label class="input-mode" for="formatSelect">
+          Format
+          <select id="formatSelect">
+            <option value="xml" selected>DIP-XML</option>
+            <option value="yaml">DIP-YAML</option>
+          </select>
+        </label>
+        <button class="btn primary" id="parseBtn" type="button">Parse</button>
+        <button class="btn" id="sampleBtn" type="button">Sample</button>
+        <button class="btn" id="clearBtn" type="button">Clear</button>
+      </div>
+      <textarea id="dipInput" spellcheck="false" aria-label="DIP input"></textarea>
+      <div class="file-row">
+        <p class="hint" id="inputHint">Paste DIP-XML here. Parsing runs as you type.</p>
+        <p class="hint">Colors: white, green, yellow, red.</p>
+      </div>
+    </aside>
+
+    <section class="viewer" id="viewer">
+      <div class="empty-state">Paste DIP-XML or DIP-YAML to render the decision matrix.</div>
+    </section>
+  </main>
+
+  <script>
+    const sampleXml = `<dip>
+  <problem>
+    Users are abandoning the multi-step checkout process because it is
+    too slow and requires re-entering data they already provided.
+  </problem>
+
+  <intentions>
+    <intention>I wish I didn't have to reach for my wallet if I've bought here before.</intention>
+    <intention>I wish the screen wouldn't blank out between steps.</intention>
+  </intentions>
+
+  <out_of_scope>
+    <item>Replacing the backend Stripe payment processing.</item>
+    <item>Building a native iOS/Android app.</item>
+  </out_of_scope>
+
+  <approaches>
+    <approach id="status_quo">Standard multi-page web form</approach>
+    <approach id="spa_modal">React-based single page modal</approach>
+    <approach id="browser_wallet">Apple Pay / Google Pay native integration</approach>
+  </approaches>
+
+  <criteria>
+    <criterion id="latency">User waiting time between actions</criterion>
+    <criterion id="dev_effort">Development and testing effort</criterion>
+    <criterion id="data_ownership">Access to raw customer email/info</criterion>
+  </criteria>
+
+  <matrix>
+    <row criterion="latency">
+      <cell approach="status_quo" color="yellow">Full page reload per step. Takes 2-4 seconds depending on network. ?</cell>
+      <cell approach="spa_modal" color="green">Instant UI updates. API calls happen in background.</cell>
+      <cell approach="browser_wallet" color="green">OS-level native UI. Near zero latency.</cell>
+    </row>
+
+    <row criterion="dev_effort">
+      <cell approach="status_quo" color="green">Zero new effort. Already exists.</cell>
+      <cell approach="spa_modal" color="red">Requires rewriting validation logic in frontend. High effort.</cell>
+      <cell approach="browser_wallet" color="yellow">Drop-in SDK, but requires domain verification setup. ?</cell>
+    </row>
+
+    <row criterion="data_ownership">
+      <cell approach="status_quo" color="white">We capture all data in our DB.</cell>
+      <cell approach="spa_modal" color="white">We capture all data in our DB.</cell>
+      <cell approach="browser_wallet" color="red">Third-party obscures some customer metadata. Limits marketing.</cell>
+    </row>
+  </matrix>
+</dip>`;
+
+    const sampleYaml = `problem_statement: >
+  Users are abandoning the multi-step checkout process because it is
+  too slow and requires re-entering data they already provided.
+
+intentions:
+  - "I wish I didn't have to reach for my wallet if I've bought here before."
+  - "I wish the screen wouldn't blank out between steps."
+
+out_of_scope:
+  - "Replacing the backend Stripe payment processing."
+  - "Building a native iOS/Android app."
+
+approaches:
+  status_quo: "Standard multi-page web form"
+  spa_modal: "React-based single page modal"
+  browser_wallet: "Apple Pay / Google Pay native integration"
+
+criteria:
+  latency: "User waiting time between actions"
+  dev_effort: "Development and testing effort"
+  data_ownership: "Access to raw customer email/info"
+
+matrix:
+  latency:
+    status_quo:
+      text: "Full page reload per step. Takes 2-4 seconds depending on network. ?"
+      color: yellow
+    spa_modal:
+      text: "Instant UI updates. API calls happen in background."
+      color: green
+    browser_wallet:
+      text: "OS-level native UI. Near zero latency."
+      color: green
+
+  dev_effort:
+    status_quo:
+      text: "Zero new effort. Already exists."
+      color: green
+    spa_modal:
+      text: "Requires rewriting validation logic in frontend. High effort."
+      color: red
+    browser_wallet:
+      text: "Drop-in SDK, but requires domain verification setup. ?"
+      color: yellow
+
+  data_ownership:
+    status_quo:
+      text: "We capture all data in our DB."
+      color: white
+    spa_modal:
+      text: "We capture all data in our DB."
+      color: white
+    browser_wallet:
+      text: "Third-party obscures some customer metadata. Limits marketing."
+      color: red
+`;
+
+    const colors = new Set(["white", "green", "yellow", "red"]);
+    const input = document.getElementById("dipInput");
+    const viewer = document.getElementById("viewer");
+    const app = document.getElementById("app");
+    const parseStatus = document.getElementById("parseStatus");
+    const formatSelect = document.getElementById("formatSelect");
+    const inputHint = document.getElementById("inputHint");
+    const parseBtn = document.getElementById("parseBtn");
+    const sampleBtn = document.getElementById("sampleBtn");
+    const clearBtn = document.getElementById("clearBtn");
+    const editorToggleBtn = document.getElementById("editorToggleBtn");
+
+    input.value = sampleXml;
+
+    parseBtn.addEventListener("click", parseAndRender);
+    sampleBtn.addEventListener("click", () => {
+      input.value = formatSelect.value === "xml" ? sampleXml : sampleYaml;
+      parseAndRender();
+    });
+    clearBtn.addEventListener("click", () => {
+      input.value = "";
+      setStatus("Waiting", "");
+      viewer.innerHTML = '<div class="empty-state">Paste DIP-XML or DIP-YAML to render the decision matrix.</div>';
+      input.focus();
+    });
+    editorToggleBtn.addEventListener("click", toggleEditor);
+    formatSelect.addEventListener("change", () => {
+      inputHint.textContent = `Paste ${formatSelect.value === "xml" ? "DIP-XML" : "DIP-YAML"} here. Parsing runs as you type.`;
+      parseAndRender();
+    });
+
+    let pendingParse = 0;
+    input.addEventListener("input", () => {
+      window.clearTimeout(pendingParse);
+      pendingParse = window.setTimeout(parseAndRender, 250);
+    });
+
+    parseAndRender();
+
+    function toggleEditor() {
+      const isHidden = app.classList.toggle("editor-hidden");
+      editorToggleBtn.textContent = isHidden ? "Show input" : "Hide input";
+      editorToggleBtn.setAttribute("aria-expanded", String(!isHidden));
+    }
+
+    function parseAndRender() {
+      const raw = input.value.trim();
+      if (!raw) {
+        setStatus("Waiting", "");
+        viewer.innerHTML = '<div class="empty-state">Paste DIP-XML or DIP-YAML to render the decision matrix.</div>';
+        return;
+      }
+
+      if (formatSelect.value === "yaml" && !window.jsyaml) {
+        setStatus("Parser unavailable", "error");
+        viewer.innerHTML = '<div class="empty-state">The js-yaml library did not load.</div>';
+        return;
+      }
+
+      try {
+        const normalized = formatSelect.value === "xml"
+          ? parseDipXml(raw)
+          : normalizeDipYaml(window.jsyaml.load(raw) || {});
+        setStatus(normalized.warnings.length ? "Parsed with warnings" : "Parsed", normalized.warnings.length ? "warn" : "ok");
+        render(normalized);
+      } catch (error) {
+        const formatLabel = formatSelect.value === "xml" ? "XML" : "YAML";
+        setStatus(`${formatLabel} error`, "error");
+        viewer.innerHTML = `
+          <div class="empty-state">
+            <strong>${formatLabel} parse failed.</strong><br>
+            ${escapeHtml(error.message || String(error))}
+          </div>
+        `;
+      }
+    }
+
+    function parseDipXml(xmlString) {
+      const parser = new DOMParser();
+      const doc = parser.parseFromString(xmlString, "application/xml");
+      const parserError = doc.querySelector("parsererror");
+      if (parserError) {
+        throw new Error(textFromElement(parserError) || "Invalid XML.");
+      }
+
+      const warnings = [];
+      const root = doc.documentElement;
+      if (!root || root.localName !== "dip") {
+        warnings.push("Root element should be <dip>.");
+      }
+
+      const dipRoot = root && root.localName === "dip" ? root : doc;
+      const firstElement = root && root.localName === "dip" ? root.children[0] : null;
+      const problemEl = firstDirectChild(dipRoot, "problem");
+      const problem = textFromElement(problemEl);
+      const intentions = directChildren(firstDirectChild(dipRoot, "intentions"), "intention").map(textFromElement).filter(Boolean);
+      const outOfScope = directChildren(firstDirectChild(dipRoot, "out_of_scope"), "item").map(textFromElement).filter(Boolean);
+      const approaches = directChildren(firstDirectChild(dipRoot, "approaches"), "approach").map((el) => ({
+        id: asText(el.getAttribute("id")),
+        label: textFromElement(el)
+      })).filter((item) => item.id || item.label);
+      const criteria = directChildren(firstDirectChild(dipRoot, "criteria"), "criterion").map((el) => ({
+        id: asText(el.getAttribute("id")),
+        label: textFromElement(el)
+      })).filter((item) => item.id || item.label);
+      const matrixRows = directChildren(firstDirectChild(dipRoot, "matrix"), "row");
+
+      if (!problem) warnings.push("Missing <problem>.");
+      if (firstElement && firstElement.localName !== "problem") {
+        warnings.push("<problem> should be the first element inside <dip>.");
+      }
+      if (!firstDirectChild(dipRoot, "approaches")) warnings.push("Missing <approaches>.");
+      if (!firstDirectChild(dipRoot, "criteria")) warnings.push("Missing <criteria>.");
+      if (!firstDirectChild(dipRoot, "matrix")) warnings.push("Missing <matrix>.");
+      if (!approaches.some((approach) => approach.id === "status_quo")) {
+        warnings.push('<approach id="status_quo"> is required.');
+      }
+
+      const seenApproaches = new Set();
+      approaches.forEach((approach) => {
+        if (!approach.id) warnings.push(`Approach "${approach.label || "(blank)"}" is missing an id.`);
+        if (approach.id && seenApproaches.has(approach.id)) warnings.push(`Duplicate approach id "${approach.id}".`);
+        seenApproaches.add(approach.id);
+      });
+
+      const seenCriteria = new Set();
+      criteria.forEach((criterion) => {
+        if (!criterion.id) warnings.push(`Criterion "${criterion.label || "(blank)"}" is missing an id.`);
+        if (criterion.id && seenCriteria.has(criterion.id)) warnings.push(`Duplicate criterion id "${criterion.id}".`);
+        seenCriteria.add(criterion.id);
+      });
+
+      const matrixByCriterion = {};
+      matrixRows.forEach((rowEl) => {
+        const criterionId = asText(rowEl.getAttribute("criterion"));
+        if (!criterionId) {
+          warnings.push("A <row> is missing its criterion attribute.");
+          return;
+        }
+        if (!seenCriteria.has(criterionId)) {
+          warnings.push(`Matrix row references unknown criterion "${criterionId}".`);
+        }
+        if (matrixByCriterion[criterionId]) {
+          warnings.push(`Duplicate matrix row for criterion "${criterionId}".`);
+        }
+        matrixByCriterion[criterionId] = matrixByCriterion[criterionId] || {};
+
+        directChildren(rowEl, "cell").forEach((cellEl) => {
+          const approachId = asText(cellEl.getAttribute("approach"));
+          const color = asText(cellEl.getAttribute("color")).toLowerCase();
+          if (!approachId) warnings.push(`A cell in row "${criterionId}" is missing its approach attribute.`);
+          if (approachId && !seenApproaches.has(approachId)) {
+            warnings.push(`Matrix cell references unknown approach "${approachId}" in row "${criterionId}".`);
+          }
+          if (approachId && matrixByCriterion[criterionId][approachId]) {
+            warnings.push(`Duplicate matrix cell: ${criterionId} / ${approachId}.`);
+          }
+          matrixByCriterion[criterionId][approachId] = {
+            text: textFromElement(cellEl),
+            color
+          };
+        });
+      });
+
+      return normalizeDipModel({
+        problem,
+        intentions,
+        outOfScope,
+        approaches,
+        criteria,
+        matrixByCriterion,
+        warnings
+      });
+    }
+
+    function normalizeDipYaml(data) {
+      const warnings = [];
+      const problem = asText(data.problem_statement);
+      const intentions = asStringArray(data.intentions);
+      const outOfScope = asStringArray(data.out_of_scope);
+      const approaches = entriesFromMap(data.approaches);
+      const criteria = entriesFromMap(data.criteria);
+      const matrix = isPlainObject(data.matrix) ? data.matrix : {};
+
+      if (!problem) warnings.push("Missing problem_statement.");
+      if (!isPlainObject(data.approaches)) warnings.push("Missing approaches map.");
+      if (!isPlainObject(data.criteria)) warnings.push("Missing criteria map.");
+      if (!isPlainObject(data.matrix)) warnings.push("Missing matrix map.");
+      if (!approaches.some((approach) => approach.id === "status_quo")) {
+        warnings.push("approaches.status_quo is required.");
+      }
+
+      const matrixByCriterion = {};
+
+      for (const criterion of criteria) {
+        matrixByCriterion[criterion.id] = {};
+        const row = isPlainObject(matrix[criterion.id]) ? matrix[criterion.id] : {};
+        if (!matrix[criterion.id]) {
+          warnings.push(`Missing matrix row for criterion "${criterion.id}".`);
+        }
+
+        for (const approach of approaches) {
+          const rawCell = isPlainObject(row[approach.id]) ? row[approach.id] : {};
+
+          matrixByCriterion[criterion.id][approach.id] = {
+            text: asText(rawCell.text),
+            color: asText(rawCell.color).toLowerCase()
+          };
+        }
+      }
+
+      return normalizeDipModel({
+        problem,
+        intentions,
+        outOfScope,
+        approaches,
+        criteria,
+        matrixByCriterion,
+        warnings
+      });
+    }
+
+    function normalizeDipModel(source) {
+      const warnings = [...source.warnings];
+      const cells = {};
+      const questions = [];
+      let populatedCells = 0;
+
+      for (const criterion of source.criteria) {
+        cells[criterion.id] = {};
+        const row = source.matrixByCriterion[criterion.id] || {};
+
+        for (const approach of source.approaches) {
+          const rawCell = row[approach.id] || {};
+          const text = asText(rawCell.text);
+          const color = asText(rawCell.color).toLowerCase();
+
+          if (!row[approach.id]) {
+            warnings.push(`Missing matrix cell: ${criterion.id} / ${approach.id}.`);
+          }
+          if (row[approach.id] && !colors.has(color)) {
+            warnings.push(`Invalid color for ${criterion.id} / ${approach.id}: "${color || "(blank)"}".`);
+          }
+          if (text) populatedCells += 1;
+          if (text.includes("?")) {
+            questions.push({
+              criterion: criterion.label,
+              approach: approach.label,
+              text
+            });
+          }
+
+          cells[criterion.id][approach.id] = {
+            text,
+            color: colors.has(color) ? color : "unknown"
+          };
+        }
+      }
+
+      return {
+        problem: source.problem,
+        intentions: source.intentions,
+        outOfScope: source.outOfScope,
+        approaches: source.approaches,
+        criteria: source.criteria,
+        cells,
+        warnings,
+        questions,
+        populatedCells
+      };
+    }
+
+    function render(model) {
+      const matrixHtml = model.criteria.length && model.approaches.length
+        ? renderMatrix(model)
+        : '<div class="empty-state">Add approaches, criteria, and matrix cells to render the grid.</div>';
+
+      viewer.innerHTML = `
+        <div class="problem">
+          <p class="problem-label">A1 Problem Statement</p>
+          <p class="problem-text">${escapeHtml(model.problem || "Missing problem")}</p>
+        </div>
+        <div class="grid">
+          ${renderSummary(model)}
+          ${matrixHtml}
+          ${renderIntentions(model.intentions)}
+          ${renderListSection("Out Of Scope", model.outOfScope)}
+          ${renderApproaches(model.approaches)}
+          ${renderQuestions(model.questions)}
+          ${renderWarnings(model.warnings)}
+        </div>
+      `;
+    }
+
+    function renderSummary(model) {
+      return `
+        <section class="section">
+          <div class="content summary">
+            <div class="metric"><strong>${model.approaches.length}</strong><span>Approaches</span></div>
+            <div class="metric"><strong>${model.criteria.length}</strong><span>Criteria</span></div>
+            <div class="metric"><strong>${model.populatedCells}</strong><span>Cells</span></div>
+            <div class="metric"><strong>${model.questions.length}</strong><span>Questions</span></div>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderIntentions(intentions) {
+      const rows = intentions.length
+        ? intentions.map((item) => `
+            <tr>
+              <td>${escapeHtml(item)}</td>
+              <td aria-label="How intentionally left blank"></td>
+            </tr>
+          `).join("")
+        : '<tr><td colspan="2">No intentions listed.</td></tr>';
+
+      return `
+        <section class="section">
+          <div class="section-header">
+            <h2>Intentions</h2>
+            <span class="count">${intentions.length}</span>
+          </div>
+          <div class="content">
+            <table class="intent-table">
+              <thead><tr><th>What</th><th>How</th></tr></thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderListSection(title, items) {
+      const body = items.length
+        ? `<ul class="plain-list">${items.map((item) => `<li>${escapeHtml(item)}</li>`).join("")}</ul>`
+        : '<div class="empty-state">None listed.</div>';
+
+      return `
+        <section class="section">
+          <div class="section-header">
+            <h2>${escapeHtml(title)}</h2>
+            <span class="count">${items.length}</span>
+          </div>
+          <div class="content">${body}</div>
+        </section>
+      `;
+    }
+
+    function renderApproaches(approaches) {
+      const body = approaches.length
+        ? `<ul class="plain-list">${approaches.map((approach) => `
+            <li><span class="approach-id">${escapeHtml(approach.id)}</span>${escapeHtml(approach.label)}</li>
+          `).join("")}</ul>`
+        : '<div class="empty-state">No approaches listed.</div>';
+
+      return `
+        <section class="section">
+          <div class="section-header">
+            <h2>Approaches</h2>
+            <span class="count">${approaches.length}</span>
+          </div>
+          <div class="content">${body}</div>
+        </section>
+      `;
+    }
+
+    function renderMatrix(model) {
+      const headers = model.approaches.map((approach) => `
+        <th>
+          <span class="approach-id">${escapeHtml(approach.id)}</span>
+          ${escapeHtml(approach.label)}
+        </th>
+      `).join("");
+
+      const rows = model.criteria.map((criterion) => {
+        const cells = model.approaches.map((approach) => {
+          const cell = model.cells[criterion.id][approach.id];
+          return `<td class="cell ${cell.color}">${escapeHtml(cell.text || "Missing cell")}</td>`;
+        }).join("");
+
+        return `
+          <tr>
+            <th class="criterion-col">
+              <span class="criterion-id">${escapeHtml(criterion.id)}</span>
+              ${escapeHtml(criterion.label)}
+            </th>
+            ${cells}
+          </tr>
+        `;
+      }).join("");
+
+      return `
+        <section class="section matrix-section">
+          <div class="section-header">
+            <h2>Decision Matrix</h2>
+            <div class="swatches">
+              <span class="swatch"><span class="dot"></span>Neutral</span>
+              <span class="swatch"><span class="dot green"></span>Desirable</span>
+              <span class="swatch"><span class="dot yellow"></span>Trade-off</span>
+              <span class="swatch"><span class="dot red"></span>Blocking</span>
+              <span class="swatch"><span class="dot unknown"></span>Invalid</span>
+            </div>
+          </div>
+          <div class="content matrix-wrap">
+            <table class="matrix-table">
+              <thead>
+                <tr>
+                  <th class="criterion-col">Criteria</th>
+                  ${headers}
+                </tr>
+              </thead>
+              <tbody>${rows}</tbody>
+            </table>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderQuestions(questions) {
+      if (!questions.length) return "";
+
+      return `
+        <section class="section">
+          <div class="section-header">
+            <h2>Questions</h2>
+            <span class="count">${questions.length}</span>
+          </div>
+          <div class="content">
+            <ul class="plain-list">
+              ${questions.map((item) => `
+                <li>
+                  <span class="criterion-id">${escapeHtml(item.criterion)} / ${escapeHtml(item.approach)}</span>
+                  ${escapeHtml(item.text)}
+                </li>
+              `).join("")}
+            </ul>
+          </div>
+        </section>
+      `;
+    }
+
+    function renderWarnings(warnings) {
+      if (!warnings.length) return "";
+
+      return `
+        <section class="section">
+          <div class="section-header">
+            <h2>Warnings</h2>
+            <span class="count">${warnings.length}</span>
+          </div>
+          <div class="content">
+            <ul class="plain-list warning-list">
+              ${warnings.map((warning) => `<li>${escapeHtml(warning)}</li>`).join("")}
+            </ul>
+          </div>
+        </section>
+      `;
+    }
+
+    function entriesFromMap(value) {
+      if (!isPlainObject(value)) return [];
+      return Object.entries(value).map(([id, label]) => ({
+        id,
+        label: asText(label)
+      }));
+    }
+
+    function asStringArray(value) {
+      return Array.isArray(value) ? value.map(asText).filter(Boolean) : [];
+    }
+
+    function asText(value) {
+      if (value === null || value === undefined) return "";
+      if (typeof value === "string") return value.trim();
+      return String(value).trim();
+    }
+
+    function isPlainObject(value) {
+      return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+    }
+
+    function firstDirectChild(parent, localName) {
+      return directChildren(parent, localName)[0] || null;
+    }
+
+    function directChildren(parent, localName) {
+      if (!parent || !parent.children) return [];
+      return Array.from(parent.children).filter((child) => child.localName === localName);
+    }
+
+    function textFromElement(element) {
+      if (!element) return "";
+      return element.textContent.replace(/\s+/g, " ").trim();
+    }
+
+    function escapeHtml(value) {
+      return asText(value)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#039;");
+    }
+
+    function setStatus(text, mode) {
+      parseStatus.textContent = text;
+      parseStatus.className = `status ${mode || ""}`.trim();
+    }
+  </script>
+</body>
+</html>
