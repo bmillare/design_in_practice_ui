@@ -452,6 +452,32 @@
       color: #6f251f;
     }
 
+    .xml-extra-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .xml-extra {
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 7px;
+      background: #fbfcfd;
+    }
+
+    .xml-extra-path {
+      display: block;
+      margin-bottom: 5px;
+      color: var(--muted);
+      font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, "Liberation Mono", monospace;
+      font-size: 0.72rem;
+    }
+
+    .xml-extra-text {
+      margin: 0;
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+    }
+
     .empty-state {
       padding: 34px;
       text-align: center;
@@ -679,6 +705,16 @@ matrix:
 `;
 
     const colors = new Set(["white", "green", "yellow", "red"]);
+    const xmlContractChildren = {
+      dip: new Set(["problem", "intentions", "out_of_scope", "approaches", "criteria", "matrix"]),
+      intentions: new Set(["intention"]),
+      intention: new Set(["wish", "how"]),
+      out_of_scope: new Set(["item"]),
+      approaches: new Set(["approach"]),
+      criteria: new Set(["criterion"]),
+      matrix: new Set(["row"]),
+      row: new Set(["cell"])
+    };
     const input = document.getElementById("dipInput");
     const viewer = document.getElementById("viewer");
     const app = document.getElementById("app");
@@ -784,6 +820,7 @@ matrix:
         label: textFromElement(el)
       })).filter((item) => item.id || item.label);
       const matrixRows = directChildren(firstDirectChild(dipRoot, "matrix"), "row");
+      const extraXml = root && root.localName === "dip" ? collectExtraXml(root) : [];
 
       if (!problem) warnings.push("Missing <problem>.");
       if (firstElement && firstElement.localName !== "problem") {
@@ -849,6 +886,7 @@ matrix:
         approaches,
         criteria,
         matrixByCriterion,
+        extraXml,
         warnings
       });
     }
@@ -900,6 +938,7 @@ matrix:
         approaches,
         criteria,
         matrixByCriterion,
+        extraXml: [],
         warnings
       });
     }
@@ -950,7 +989,8 @@ matrix:
         cells,
         warnings,
         questions,
-        populatedCells
+        populatedCells,
+        extraXml: Array.isArray(source.extraXml) ? source.extraXml : []
       };
     }
 
@@ -970,6 +1010,7 @@ matrix:
           ${renderIntentions(model.intentions)}
           ${renderListSection("Out Of Scope", model.outOfScope)}
           ${renderApproaches(model.approaches)}
+          ${renderExtraXml(model.extraXml)}
           ${renderQuestions(model.questions)}
           ${renderWarnings(model.warnings)}
         </div>
@@ -1124,6 +1165,29 @@ matrix:
       `;
     }
 
+    function renderExtraXml(extraXml) {
+      if (!extraXml.length) return "";
+
+      return `
+        <section class="section">
+          <div class="section-header">
+            <h2>Additional XML</h2>
+            <span class="count">${extraXml.length}</span>
+          </div>
+          <div class="content">
+            <div class="xml-extra-list">
+              ${extraXml.map((item) => `
+                <article class="xml-extra">
+                  <span class="xml-extra-path">${escapeHtml(item.path)}</span>
+                  <p class="xml-extra-text">${escapeHtml(item.text)}</p>
+                </article>
+              `).join("")}
+            </div>
+          </div>
+        </section>
+      `;
+    }
+
     function renderWarnings(warnings) {
       if (!warnings.length) return "";
 
@@ -1157,6 +1221,28 @@ matrix:
         wish: wishEl ? textFromElement(wishEl) : directTextFromElement(element),
         how: textFromElement(howEl)
       };
+    }
+
+    function collectExtraXml(root) {
+      const extras = [];
+      collectExtraXmlFrom(root, "dip", extras);
+      return extras;
+    }
+
+    function collectExtraXmlFrom(element, path, extras) {
+      const allowedChildren = xmlContractChildren[element.localName];
+      if (!allowedChildren || !element.children) return;
+
+      Array.from(element.children).forEach((child) => {
+        const childPath = `${path} > ${child.localName}`;
+        if (!allowedChildren.has(child.localName)) {
+          const text = textFromElement(child);
+          if (text) extras.push({ path: childPath, text });
+          return;
+        }
+
+        collectExtraXmlFrom(child, childPath, extras);
+      });
     }
 
     function normalizeIntentions(value) {
