@@ -575,7 +575,10 @@
   </problem>
 
   <intentions>
-    <intention>I wish I didn't have to reach for my wallet if I've bought here before.</intention>
+    <intention>
+      <wish>I wish I didn't have to reach for my wallet if I've bought here before.</wish>
+      <how>Use stored customer profiles to prefill checkout details for returning shoppers.</how>
+    </intention>
     <intention>I wish the screen wouldn't blank out between steps.</intention>
   </intentions>
 
@@ -622,7 +625,8 @@
   too slow and requires re-entering data they already provided.
 
 intentions:
-  - "I wish I didn't have to reach for my wallet if I've bought here before."
+  - wish: "I wish I didn't have to reach for my wallet if I've bought here before."
+    how: "Use stored customer profiles to prefill checkout details for returning shoppers."
   - "I wish the screen wouldn't blank out between steps."
 
 out_of_scope:
@@ -769,7 +773,7 @@ matrix:
       const firstElement = root && root.localName === "dip" ? root.children[0] : null;
       const problemEl = firstDirectChild(dipRoot, "problem");
       const problem = textFromElement(problemEl);
-      const intentions = directChildren(firstDirectChild(dipRoot, "intentions"), "intention").map(textFromElement).filter(Boolean);
+      const intentions = directChildren(firstDirectChild(dipRoot, "intentions"), "intention").map(parseXmlIntention).filter((item) => item.wish || item.how);
       const outOfScope = directChildren(firstDirectChild(dipRoot, "out_of_scope"), "item").map(textFromElement).filter(Boolean);
       const approaches = directChildren(firstDirectChild(dipRoot, "approaches"), "approach").map((el) => ({
         id: asText(el.getAttribute("id")),
@@ -856,7 +860,7 @@ matrix:
     function normalizeDipYaml(data) {
       const warnings = [];
       const problem = asText(data.problem_statement);
-      const intentions = asStringArray(data.intentions);
+      const intentions = normalizeIntentions(data.intentions);
       const outOfScope = asStringArray(data.out_of_scope);
       const approaches = entriesFromMap(data.approaches);
       const criteria = entriesFromMap(data.criteria);
@@ -939,7 +943,7 @@ matrix:
 
       return {
         problem: source.problem,
-        intentions: source.intentions,
+        intentions: normalizeIntentions(source.intentions),
         outOfScope: source.outOfScope,
         approaches: source.approaches,
         criteria: source.criteria,
@@ -989,8 +993,8 @@ matrix:
       const rows = intentions.length
         ? intentions.map((item) => `
             <tr>
-              <td>${escapeHtml(item)}</td>
-              <td aria-label="How intentionally left blank"></td>
+              <td>${escapeHtml(item.wish)}</td>
+              <td${item.how ? "" : ' aria-label="How intentionally left blank"'}>${escapeHtml(item.how)}</td>
             </tr>
           `).join("")
         : '<tr><td colspan="2">No intentions listed.</td></tr>';
@@ -1146,6 +1150,31 @@ matrix:
       }));
     }
 
+    function parseXmlIntention(element) {
+      const wishEl = firstDirectChild(element, "wish");
+      const howEl = firstDirectChild(element, "how");
+      return {
+        wish: wishEl ? textFromElement(wishEl) : directTextFromElement(element),
+        how: textFromElement(howEl)
+      };
+    }
+
+    function normalizeIntentions(value) {
+      if (!Array.isArray(value)) return [];
+      return value.map((item) => {
+        if (isPlainObject(item)) {
+          return {
+            wish: asText(item.wish || item.what || item.text),
+            how: asText(item.how)
+          };
+        }
+        return {
+          wish: asText(item),
+          how: ""
+        };
+      }).filter((item) => item.wish || item.how);
+    }
+
     function asStringArray(value) {
       return Array.isArray(value) ? value.map(asText).filter(Boolean) : [];
     }
@@ -1172,6 +1201,16 @@ matrix:
     function textFromElement(element) {
       if (!element) return "";
       return element.textContent.replace(/\s+/g, " ").trim();
+    }
+
+    function directTextFromElement(element) {
+      if (!element || !element.childNodes) return "";
+      return Array.from(element.childNodes)
+        .filter((node) => node.nodeType === Node.TEXT_NODE)
+        .map((node) => node.textContent)
+        .join(" ")
+        .replace(/\s+/g, " ")
+        .trim();
     }
 
     function escapeHtml(value) {

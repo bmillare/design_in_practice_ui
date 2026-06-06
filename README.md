@@ -37,7 +37,7 @@ Open `index.html` in a browser, or use the hosted page, then paste DIP-XML or
 DIP-YAML. Parsing runs as you type and renders:
 
 - the A1 problem statement
-- user intentions with a blank "How" column
+- user intentions with an optional "How" column
 - approaches, including the required `status_quo`
 - criteria
 - matrix cells aligned for contrast
@@ -55,7 +55,7 @@ selector and uses `js-yaml` from a CDN.
 A useful decision matrix captures:
 
 - `problem`: the problem or decision being taken on
-- `intentions`: what users want to accomplish, not how they will do it
+- `intentions`: what users want to accomplish, with optional implementation notes in `how`
 - `out_of_scope`: explicit boundaries
 - `approaches`: candidate strategies or designs, with `status_quo` first
 - `criteria`: the things that matter when deciding
@@ -79,7 +79,10 @@ Supported colors:
   </problem>
 
   <intentions>
-    <intention>I wish I could check out without reaching for my wallet.</intention>
+    <intention>
+      <wish>I wish I could check out without reaching for my wallet.</wish>
+      <how>Prefill checkout from the returning customer profile.</how>
+    </intention>
   </intentions>
 
   <out_of_scope>
@@ -117,7 +120,8 @@ problem_statement: >
   re-enter data they already provided.
 
 intentions:
-  - I wish I could check out without reaching for my wallet.
+  - wish: I wish I could check out without reaching for my wallet.
+    how: Prefill checkout from the returning customer profile.
 
 out_of_scope:
   - Replacing the payment processor.
